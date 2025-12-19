@@ -188,21 +188,23 @@ check_php() {
 
 detect_best_php_version() {
     # Try to find the best available PHP version from repositories
-    # Prefer: 8.3 > 8.2 > 8.1 > 8.0 > 7.4
+    # Prefer: 8.3 > 8.2 > 8.1
+    # Note: Only use modern PHP versions suitable for WordPress
 
-    local preferred_versions=("8.3" "8.2" "8.1" "8.0" "7.4")
+    local preferred_versions=("8.3" "8.2" "8.1")
+
+    log_step "Detecting available PHP versions"
 
     for version in "${preferred_versions[@]}"; do
         if apt-cache show "php${version}-fpm" &>/dev/null; then
             PHP_MAJOR_VERSION="$version"
-            log_info "Found available PHP version: ${version}"
+            log_success "Found PHP ${version} in repositories"
             return 0
         fi
     done
 
-    # Fallback to 8.2 if nothing found (shouldn't happen after PPA is added)
-    PHP_MAJOR_VERSION="8.2"
-    log_warning "Could not detect available PHP versions, defaulting to 8.2"
+    # If no modern PHP found, the PPA likely wasn't added correctly
+    log_error "No modern PHP versions (8.1, 8.2, 8.3) found in repositories. The Ondrej PPA may not be configured correctly. Please ensure repositories are added properly."
 }
 
 check_redis() {

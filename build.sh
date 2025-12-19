@@ -194,6 +194,12 @@ run_installation() {
     install_dependencies
     add_repositories
 
+    # Re-detect PHP version after adding repositories (to find versions from PPA)
+    if [[ "${PHP_INSTALLED:-0}" != "1" ]]; then
+        detect_best_php_version
+        log_info "Will install PHP ${PHP_MAJOR_VERSION}"
+    fi
+
     # Install only what's needed
     [[ "${NGINX_INSTALLED:-0}" != "1" ]] && install_nginx
     [[ "${MARIADB_INSTALLED:-0}" != "1" ]] && install_mariadb
