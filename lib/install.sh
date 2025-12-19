@@ -71,18 +71,31 @@ add_repositories() {
 
     # Add Ondrej PHP PPA
     if ! grep -rq "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
-        log_info "Adding Ondrej PHP PPA"
+        log_info "Adding Ondrej PHP PPA for Ubuntu ${OS_VERSION}"
 
         # Install software-properties-common if not present
         if ! command_exists add-apt-repository; then
-            apt-get install -y software-properties-common &>/dev/null
+            log_step "Installing software-properties-common"
+            apt-get install -y software-properties-common
         fi
 
+        # Add GPG key first
+        log_step "Adding Ondrej PPA GPG key"
+        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 2>&1 | grep -v "^gpg:"
+
         # Add the PPA
-        if add-apt-repository -y ppa:ondrej/php; then
+        log_step "Adding ppa:ondrej/php"
+        if add-apt-repository -y ppa:ondrej/php 2>&1 | tee -a "${INSTALL_LOG}"; then
             log_success "Ondrej PHP PPA added successfully"
         else
-            log_error "Failed to add Ondrej PHP PPA"
+            log_error "Failed to add Ondrej PHP PPA. Please check internet connection and try again."
+        fi
+
+        # Verify PPA was added
+        if [[ -f /etc/apt/sources.list.d/ondrej-ubuntu-php-${OS_CODENAME}.list ]]; then
+            log_success "PPA file created: /etc/apt/sources.list.d/ondrej-ubuntu-php-${OS_CODENAME}.list"
+        else
+            log_warning "PPA file not found, but continuing..."
         fi
     else
         log_info "Ondrej PHP PPA already added"
@@ -99,11 +112,20 @@ add_repositories() {
     fi
 
     # Update package lists after adding repositories
-    log_step "Updating package lists"
-    if apt-get update -qq; then
+    log_step "Updating package lists (this may take a moment)"
+    if apt-get update 2>&1 | tee -a "${INSTALL_LOG}" | grep -E "(Hit|Get):" | tail -5; then
         log_success "Package lists updated"
+
+        # Verify PHP packages are available
+        log_step "Verifying PHP packages availability"
+        for version in 8.3 8.2 8.1; do
+            if apt-cache show "php${version}-fpm" &>/dev/null; then
+                log_success "PHP ${version} packages are available"
+                break
+            fi
+        done
     else
-        log_warning "Package list update had issues, continuing..."
+        log_error "Failed to update package lists. Please check internet connection."
     fi
 
     log_success "Repositories configured"
