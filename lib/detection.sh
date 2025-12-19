@@ -63,13 +63,23 @@ detect_os() {
         log_error "This script only supports Ubuntu. Detected: $OS_NAME"
     fi
 
-    # Check Ubuntu version
+    # Check Ubuntu version and warn about EOL
     case "$OS_VERSION" in
-        20.04|22.04|24.04)
+        20.04)
+            log_success "Detected: $OS_NAME $OS_VERSION ($OS_CODENAME)"
+            log_warning "Ubuntu 20.04 reached End of Standard Support on May 29, 2025"
+            log_warning "Ondrej PHP PPA support may be limited or unavailable"
+            log_warning "Recommended: Upgrade to Ubuntu 22.04 LTS or 24.04 LTS"
+            echo
+            if ! confirm "Continue anyway with Ubuntu 20.04?"; then
+                log_error "Installation cancelled. Please upgrade to Ubuntu 22.04 or 24.04"
+            fi
+            ;;
+        22.04|24.04)
             log_success "Detected: $OS_NAME $OS_VERSION ($OS_CODENAME)"
             ;;
         *)
-            log_warning "Ubuntu $OS_VERSION detected. Recommended: 20.04 LTS, 22.04 LTS, or 24.04 LTS"
+            log_warning "Ubuntu $OS_VERSION detected. Recommended: 22.04 LTS or 24.04 LTS"
             log_warning "Script may work but is not officially tested on this version"
             ;;
     esac
@@ -189,12 +199,29 @@ check_php() {
 
 detect_best_php_version() {
     # Try to find the best available PHP version from repositories
-    # Prefer: 8.3 > 8.2 > 8.1
-    # Note: Only use modern PHP versions suitable for WordPress
+    # Version preference depends on Ubuntu version
 
-    local preferred_versions=("8.3" "8.2" "8.1")
+    local preferred_versions
 
-    log_step "Detecting available PHP versions"
+    # Ubuntu version-specific PHP preferences
+    case "$OS_VERSION" in
+        20.04)
+            # Ubuntu 20.04 (EOL): Try available versions, may be limited
+            preferred_versions=("8.1" "8.0" "7.4")
+            log_step "Detecting available PHP versions for Ubuntu 20.04 (EOL)"
+            log_warning "Limited PHP versions may be available due to Ubuntu 20.04 EOL"
+            ;;
+        22.04|24.04)
+            # Ubuntu 22.04/24.04: Full support for modern PHP
+            preferred_versions=("8.3" "8.2" "8.1")
+            log_step "Detecting available PHP versions for Ubuntu ${OS_VERSION}"
+            ;;
+        *)
+            # Unknown version: try modern versions
+            preferred_versions=("8.3" "8.2" "8.1" "8.0")
+            log_step "Detecting available PHP versions"
+            ;;
+    esac
 
     for version in "${preferred_versions[@]}"; do
         if apt-cache show "php${version}-fpm" &>/dev/null; then
@@ -204,8 +231,12 @@ detect_best_php_version() {
         fi
     done
 
-    # If no modern PHP found, the PPA likely wasn't added correctly
-    log_error "No modern PHP versions (8.1, 8.2, 8.3) found in repositories. The Ondrej PPA may not be configured correctly. Please ensure repositories are added properly."
+    # If no PHP found
+    if [[ "$OS_VERSION" == "20.04" ]]; then
+        log_error "No PHP versions found. Ubuntu 20.04 has reached EOL and Ondrej PPA support has ended. Please upgrade to Ubuntu 22.04 or 24.04 LTS."
+    else
+        log_error "No modern PHP versions (8.1, 8.2, 8.3) found in repositories. The Ondrej PPA may not be configured correctly."
+    fi
 }
 
 check_redis() {
