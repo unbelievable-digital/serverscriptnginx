@@ -85,6 +85,24 @@ EOF
 generate_nginx_site() {
     local domain="$1"
     local site_root="${2:-/var/www/${domain}/public_html}"
+
+    # Detect PHP version if not set
+    if [[ -z "${PHP_MAJOR_VERSION:-}" ]]; then
+        if command -v php &>/dev/null; then
+            PHP_MAJOR_VERSION=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;' 2>/dev/null)
+        else
+            # Fallback: try to find any installed PHP-FPM version
+            for version in 8.3 8.2 8.1 8.0 7.4; do
+                if [[ -f "/run/php/php${version}-fpm.sock" ]]; then
+                    PHP_MAJOR_VERSION="$version"
+                    break
+                fi
+            done
+            # Ultimate fallback
+            PHP_MAJOR_VERSION="${PHP_MAJOR_VERSION:-8.2}"
+        fi
+    fi
+
     local php_sock="/run/php/php${PHP_MAJOR_VERSION}-fpm.sock"
 
     local config_file="/etc/nginx/sites-available/${domain}"
