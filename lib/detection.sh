@@ -181,8 +181,9 @@ check_php() {
         esac
     else
         PHP_INSTALLED=0
-        detect_best_php_version
-        log_info "PHP not installed (will install PHP ${PHP_MAJOR_VERSION})"
+        # Don't detect version yet - will be done after adding repositories
+        PHP_MAJOR_VERSION="8.3"  # Default preference
+        log_info "PHP not installed (will detect best version after adding repositories)"
     fi
 }
 
