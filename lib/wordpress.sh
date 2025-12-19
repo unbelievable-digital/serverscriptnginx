@@ -28,7 +28,49 @@ add_wordpress_site() {
 
     # Check if site already exists
     if [[ -d "/var/www/${domain}" ]]; then
-        log_error "Site already exists at /var/www/${domain}"
+        log_warning "Site directory already exists at /var/www/${domain}"
+        echo
+        echo "This could be from an incomplete installation. Options:"
+        echo "  1. Remove and start fresh (recommended for incomplete installations)"
+        echo "  2. Cancel and keep existing files"
+        echo
+        read -p "Enter choice [1-2]: " choice
+
+        case $choice in
+            1)
+                log_warning "Removing existing site directory..."
+                # Get database name if it exists in config
+                local old_db_name=$(grep "^${domain}|" "$CONFIG_FILE" 2>/dev/null | cut -d'|' -f2)
+                local old_db_user=$(grep "^${domain}|" "$CONFIG_FILE" 2>/dev/null | cut -d'|' -f3)
+
+                # Remove database if exists
+                if [[ -n "$old_db_name" ]]; then
+                    mysql -e "DROP DATABASE IF EXISTS ${old_db_name};" 2>/dev/null
+                    mysql -e "DROP USER IF EXISTS '${old_db_user}'@'localhost';" 2>/dev/null
+                    log_info "Removed old database: ${old_db_name}"
+                fi
+
+                # Remove directory
+                rm -rf "/var/www/${domain}"
+
+                # Remove from registry
+                sed -i "/^${domain}|/d" "$CONFIG_FILE" 2>/dev/null
+
+                # Remove nginx config
+                rm -f "/etc/nginx/sites-enabled/${domain}" 2>/dev/null
+                rm -f "/etc/nginx/sites-available/${domain}" 2>/dev/null
+
+                log_success "Old installation removed, starting fresh..."
+                echo
+                ;;
+            2)
+                log_info "Installation cancelled"
+                return 0
+                ;;
+            *)
+                log_error "Invalid choice"
+                ;;
+        esac
     fi
 
     log_info "Setting up WordPress site for: ${domain}"
