@@ -13,6 +13,7 @@ An intelligent, automated WordPress hosting solution for Ubuntu servers with LEM
 - **Security Hardening**: Firewall configuration, MySQL security, and WordPress hardening
 - **Interactive Menu**: User-friendly menu system for server management
 - **Performance Monitoring**: Built-in monitoring tools for system resources
+- **Performance Settings Viewer**: View all current PHP, MySQL, Nginx, and Redis configurations with detailed reports
 
 ## Requirements
 
@@ -90,6 +91,9 @@ sudo ./build.sh --backup-all
 # Show system status
 ./build.sh --system-status
 
+# View all performance settings
+sudo ./build.sh --performance
+
 # Show version
 ./build.sh --version
 ```
@@ -110,9 +114,20 @@ Menu Options:
 3. **Manage Existing Site** - SSL, backups, removal
 4. **System Status & Monitoring** - View resources and service status
 5. **Backup Management** - Manual backups, backup list
-6. **Performance Tuning** - View configs, clear caches
+6. **Performance Tuning** - View all settings, PHP/MySQL/Nginx/Redis configs, clear caches
 7. **Security Management** - Firewall, SSL certificates
 8. **Exit** - Exit menu system
+
+#### Performance Tuning Submenu:
+1. **Show All Performance Settings** - Complete overview of all configurations
+2. **Show PHP Configuration** - PHP.ini, FPM pool settings, loaded modules
+3. **Show MySQL Configuration** - InnoDB settings, connections, runtime values
+4. **Show Nginx Configuration** - Workers, cache, compression, enabled sites
+5. **Show Redis Configuration** - Memory settings, persistence, runtime stats
+6. **Recalculate Resources** - Re-detect system resources and show allocations
+7. **Clear All Caches** - Clear Redis and Nginx FastCGI caches
+8. **Save Configuration Report** - Generate timestamped performance report
+9. **Back to Main Menu**
 
 ## Installation Process
 
@@ -204,6 +219,58 @@ The script intelligently allocates resources based on available RAM:
 - PHP-FPM Start Servers: CPU cores × 2
 - PHP-FPM Min Spare: CPU cores × 1
 - PHP-FPM Max Spare: CPU cores × 3
+
+## Viewing Performance Settings
+
+After installation, you can view and review all current performance configurations:
+
+### Command Line
+```bash
+# View all performance settings at once
+sudo ./build.sh --performance
+
+# Or use the alias
+sudo ./build.sh --show-settings
+```
+
+### Via Interactive Menu
+```bash
+sudo ./build.sh --menu
+# Select option 6: Performance Tuning
+```
+
+### What You Can View
+
+1. **Complete Overview** - All system resources, calculated allocations, and service status
+2. **PHP Settings** - Memory limits, upload sizes, execution times, OPcache, FPM pool configuration, loaded modules
+3. **MySQL/MariaDB Settings** - InnoDB buffer pool, log file sizes, max connections, query cache, runtime values
+4. **Nginx Settings** - Worker processes, FastCGI cache, gzip compression, client limits, enabled sites
+5. **Redis Settings** - Memory limits, eviction policy, persistence status, current memory usage
+
+### Performance Reports
+
+Generate a detailed timestamped report of all configurations:
+
+```bash
+sudo ./build.sh --performance
+# Then select option 8: Save Configuration Report
+```
+
+Reports are saved to `/opt/wpserver/logs/performance-report-YYYYMMDD_HHMMSS.txt` and include:
+- System resources (CPU, RAM, disk)
+- All calculated resource allocations
+- Complete PHP configuration with file paths
+- MySQL/MariaDB settings with runtime values
+- Nginx configuration details
+- Redis configuration and statistics
+- Service status for all components
+
+These reports are useful for:
+- Documenting server configuration
+- Troubleshooting performance issues
+- Planning server upgrades
+- Comparing configurations across servers
+- Compliance and audit requirements
 
 ## Directory Structure
 

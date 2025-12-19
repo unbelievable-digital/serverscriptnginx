@@ -88,6 +88,8 @@ OPTIONS:
     --list-sites        List all WordPress sites
     --backup-all        Backup all WordPress sites
     --system-status     Display system status and resource usage
+    --performance       Show all performance settings and configurations
+    --show-settings     Alias for --performance
     --update            Update this script to latest version
     --version           Show version information
     -h, --help          Show this help message
@@ -107,6 +109,9 @@ EXAMPLES:
 
     # Backup all sites
     sudo ./build.sh --backup-all
+
+    # View performance settings
+    sudo ./build.sh --performance
 
 For more information, visit: https://github.com/yourusername/wpserverscript
 EOF
@@ -322,6 +327,20 @@ parse_arguments() {
                     detect_ram
                     detect_disk
                     display_system_info
+                fi
+                exit 0
+                ;;
+            --performance|--show-settings)
+                if type -t show_all_performance_settings &>/dev/null; then
+                    show_all_performance_settings
+                    echo
+                    read -p "Save detailed report? (y/N): " -n 1 -r
+                    echo
+                    if [[ $REPLY =~ ^[Yy]$ ]]; then
+                        save_performance_report
+                    fi
+                else
+                    log_error "Performance viewing not available. Run --install first."
                 fi
                 exit 0
                 ;;
