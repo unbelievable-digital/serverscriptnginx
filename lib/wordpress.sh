@@ -192,22 +192,229 @@ REDIS_CONFIG
     # Store credentials
     store_credentials "$domain" "$db_name" "$db_user" "$db_pass" "$wp_admin_pass"
 
+    # Auto-install WordPress if WP-CLI is available
+    local wp_admin_user=""
+    local wp_admin_email=""
+    local site_title=""
+
+    if command_exists wp; then
+        log_step "Installing WordPress automatically"
+
+        # Get WordPress admin details
+        read -p "WordPress admin username [admin]: " wp_admin_user
+        wp_admin_user="${wp_admin_user:-admin}"
+
+        read -p "WordPress admin email: " wp_admin_email
+        while [[ -z "$wp_admin_email" ]]; do
+            read -p "Email is required. WordPress admin email: " wp_admin_email
+        done
+
+        read -p "Site title [${domain}]: " site_title
+        site_title="${site_title:-${domain}}"
+
+        # Install WordPress
+        cd "${site_root}/public_html"
+        if wp core install \
+            --url="http://${domain}" \
+            --title="$site_title" \
+            --admin_user="$wp_admin_user" \
+            --admin_password="$wp_admin_pass" \
+            --admin_email="$wp_admin_email" \
+            --allow-root &>/dev/null; then
+
+            log_success "WordPress installed successfully!"
+
+            # Install and activate Redis Object Cache plugin
+            log_step "Installing Redis Object Cache plugin"
+            wp plugin install redis-cache --activate --allow-root &>/dev/null
+            wp redis enable --allow-root &>/dev/null
+            log_success "Redis Object Cache enabled"
+        else
+            log_warning "WordPress auto-install failed, you can complete it manually"
+        fi
+    else
+        log_info "WP-CLI not available, WordPress installation must be completed via web browser"
+    fi
+
+    # Create detailed installation report
+    local report_file="${BASE_DIR}/logs/site-${domain}-$(date +%Y%m%d_%H%M%S).txt"
+
+    cat > "$report_file" <<EOF
+================================================================================
+WordPress Site Installation Report
+================================================================================
+
+Installation Date: $(date '+%Y-%m-%d %H:%M:%S')
+Server: $(hostname)
+Server IP: $(hostname -I | awk '{print $1}')
+
+================================================================================
+SITE INFORMATION
+================================================================================
+
+Domain:              ${domain}
+Site Title:          ${site_title:-"Not installed"}
+Site URL:            http://${domain}
+Site Root:           ${site_root}/public_html
+Logs Directory:      ${site_root}/logs
+SSL Directory:       ${site_root}/ssl
+
+================================================================================
+DATABASE CREDENTIALS
+================================================================================
+
+Database Name:       ${db_name}
+Database User:       ${db_user}
+Database Password:   ${db_pass}
+Database Host:       localhost
+
+================================================================================
+WORDPRESS ADMIN CREDENTIALS
+================================================================================
+
+Admin Username:      ${wp_admin_user:-"Setup via browser"}
+Admin Password:      ${wp_admin_pass}
+Admin Email:         ${wp_admin_email:-"Setup via browser"}
+Admin URL:           http://${domain}/wp-admin
+
+================================================================================
+SERVER CONFIGURATION
+================================================================================
+
+Nginx Config:        /etc/nginx/sites-available/${domain}
+Nginx Enabled:       /etc/nginx/sites-enabled/${domain}
+PHP Version:         ${PHP_VERSION:-${PHP_MAJOR_VERSION}}
+PHP-FPM Socket:      /run/php/php${PHP_MAJOR_VERSION}-fpm.sock
+
+WordPress Version:   $(cd "${site_root}/public_html" && wp core version --allow-root 2>/dev/null || echo "Latest")
+Redis Enabled:       Yes
+FastCGI Cache:       Enabled
+
+================================================================================
+FILE PERMISSIONS
+================================================================================
+
+Owner:               www-data:www-data
+Directories:         755
+Files:               644
+wp-config.php:       440
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. DNS Configuration:
+   Point your domain to: $(hostname -I | awk '{print $1}')
+
+   A Record:
+   Host: @
+   Value: $(hostname -I | awk '{print $1}')
+
+   CNAME Record (optional):
+   Host: www
+   Value: ${domain}
+
+2. SSL Certificate:
+   Run: sudo ./build.sh --menu
+   Then select: Manage Existing Site → Install SSL Certificate
+   Or run: sudo certbot --nginx -d ${domain} -d www.${domain}
+
+3. WordPress Setup:
+   $(if [[ -n "$wp_admin_user" ]]; then
+       echo "Already installed! Visit: http://${domain}/wp-admin"
+       echo "   Username: ${wp_admin_user}"
+       echo "   Password: ${wp_admin_pass}"
+   else
+       echo "Visit: http://${domain}"
+       echo "   Complete the WordPress installation wizard"
+   fi)
+
+4. Redis Object Cache:
+   $(if [[ -n "$wp_admin_user" ]]; then
+       echo "Already enabled!"
+   else
+       echo "Install 'Redis Object Cache' plugin from WordPress admin"
+       echo "   Activate and click 'Enable Object Cache'"
+   fi)
+
+5. Security:
+   - Update WordPress admin password after first login
+   - Keep WordPress core, themes, and plugins updated
+   - Regular backups are scheduled at 2 AM daily
+
+================================================================================
+IMPORTANT FILES
+================================================================================
+
+This Report:         ${report_file}
+All Credentials:     ${CREDENTIALS_FILE}
+Installation Log:    ${INSTALL_LOG}
+Error Log:           ${ERROR_LOG}
+Backup Location:     ${BASE_DIR}/backups/
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Check site status:
+  sudo systemctl status nginx
+  sudo systemctl status php${PHP_MAJOR_VERSION}-fpm
+  sudo systemctl status mariadb
+  sudo systemctl status redis-server
+
+View error logs:
+  sudo tail -f ${site_root}/logs/error.log
+  sudo tail -f /var/log/nginx/error.log
+  sudo tail -f /var/log/php${PHP_MAJOR_VERSION}-fpm.log
+
+Test Nginx config:
+  sudo nginx -t
+
+Reload Nginx:
+  sudo systemctl reload nginx
+
+================================================================================
+SUPPORT
+================================================================================
+
+For issues or questions, check the logs above or run:
+  sudo ./build.sh --menu
+
+Monitor system: ${BASE_DIR}/scripts/monitor.sh
+List all sites: sudo ./build.sh --list-sites
+
+================================================================================
+EOF
+
     # Success message
     log_header "WordPress Site Created Successfully!"
     echo
     echo -e "${COLOR_GREEN}Site Details:${COLOR_RESET}"
     table_row "Domain" "$domain"
-    table_row "Site Root" "${site_root}/public_html"
-    table_row "Database Name" "$db_name"
-    table_row "Database User" "$db_user"
-    table_row "Database Password" "$db_pass"
+    table_row "Site URL" "http://${domain}"
+    table_row "Admin URL" "http://${domain}/wp-admin"
+    if [[ -n "$wp_admin_user" ]]; then
+        table_row "Admin User" "$wp_admin_user"
+        table_row "Admin Password" "$wp_admin_pass"
+    fi
+    table_row "Database" "$db_name"
+    echo
+    echo -e "${COLOR_CYAN}Installation Report:${COLOR_RESET}"
+    echo "  ${COLOR_GREEN}✓${COLOR_RESET} Detailed report saved to:"
+    echo "    ${report_file}"
     echo
     echo -e "${COLOR_CYAN}Next Steps:${COLOR_RESET}"
-    echo "  1. Point your domain DNS to this server's IP address"
-    echo "  2. Visit http://${domain} to complete WordPress installation"
-    echo "  3. Run: wpserver --add-ssl ${domain} (to install SSL certificate)"
+    echo "  1. Point your domain DNS to this server's IP: $(hostname -I | awk '{print $1}')"
+    if [[ -n "$wp_admin_user" ]]; then
+        echo "  2. Visit http://${domain}/wp-admin to login"
+        echo "  3. Install SSL certificate (recommended)"
+    else
+        echo "  2. Visit http://${domain} to complete WordPress installation"
+        echo "  3. Install SSL certificate (recommended)"
+    fi
     echo
-    log_info "Credentials saved to: ${CREDENTIALS_FILE}"
+    log_info "All credentials saved to: ${CREDENTIALS_FILE}"
+    log_success "Installation report: ${report_file}"
     echo
 
     # Offer SSL installation
