@@ -225,15 +225,23 @@ list_sites() {
 
     if [[ ! -f "$CONFIG_FILE" ]]; then
         log_warning "No sites registered yet"
-        return
+        return 0
     fi
 
     echo -e "${COLOR_CYAN}Registered WordPress Sites:${COLOR_RESET}"
     echo
 
     local count=0
-    while IFS='|' read -r domain db_name created; do
-        ((count++))
+    while IFS='|' read -r domain db_name created rest; do
+        # Skip empty lines
+        [[ -z "$domain" ]] && continue
+
+        # Skip comment lines
+        [[ "$domain" =~ ^#.* ]] && continue
+
+        # Increment count
+        count=$((count + 1))
+
         echo -e "${COLOR_GREEN}${count}.${COLOR_RESET} ${COLOR_BOLD}${domain}${COLOR_RESET}"
         table_row "  Database" "$db_name"
         table_row "  Created" "$created"
@@ -253,6 +261,8 @@ list_sites() {
     else
         log_info "Total sites: $count"
     fi
+
+    return 0
 }
 
 remove_site() {
