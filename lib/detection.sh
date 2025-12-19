@@ -336,9 +336,9 @@ display_system_status() {
     log_header "System Status"
 
     # Detect resources if not already done
-    [[ -z "$CPU_CORES" ]] && detect_cpu
-    [[ -z "$TOTAL_RAM_MB" ]] && detect_ram
-    [[ -z "$AVAILABLE_DISK_GB" ]] && detect_disk
+    [[ -z "${CPU_CORES:-}" ]] && detect_cpu
+    [[ -z "${TOTAL_RAM_MB:-}" ]] && detect_ram
+    [[ -z "${AVAILABLE_DISK_GB:-}" ]] && detect_disk
 
     # System info
     table_row "CPU Cores" "$CPU_CORES"
@@ -351,7 +351,17 @@ display_system_status() {
     echo -e "${COLOR_CYAN}Service Status:${COLOR_RESET}"
     echo
 
-    for service in nginx mariadb mysql "php${PHP_MAJOR_VERSION}-fpm" redis-server; do
+    # Detect PHP version if not set
+    [[ -z "${PHP_MAJOR_VERSION:-}" ]] && check_php
+
+    local services=("nginx" "mariadb" "mysql" "redis-server")
+
+    # Add PHP-FPM service if version is known
+    if [[ -n "${PHP_MAJOR_VERSION:-}" ]]; then
+        services+=("php${PHP_MAJOR_VERSION}-fpm")
+    fi
+
+    for service in "${services[@]}"; do
         if systemctl list-unit-files | grep -q "^${service}.service"; then
             if is_service_running "$service"; then
                 echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} ${service} (running)"
