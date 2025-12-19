@@ -84,9 +84,27 @@ add_wordpress_site() {
     log_step "Adding security keys"
     local salts=$(curl -sS https://api.wordpress.org/secret-key/1.1/salt/)
     if [[ -n "$salts" ]]; then
-        # Replace salts in wp-config.php
+        # Save salts to temporary file
+        echo "$salts" > /tmp/wp-salts.txt
+
+        # Remove existing salt definitions
         sed -i "/define( *'AUTH_KEY'/,/define( *'NONCE_SALT'/d" wp-config.php
-        sed -i "/'DB_COLLATE'/a\\${salts}" wp-config.php
+
+        # Insert new salts after DB_COLLATE line using a more reliable method
+        # Find the line number of DB_COLLATE
+        local insert_line=$(grep -n "DB_COLLATE" wp-config.php | cut -d: -f1)
+        if [[ -n "$insert_line" ]]; then
+            # Split file at insertion point and insert salts
+            head -n "$insert_line" wp-config.php > /tmp/wp-config-part1.php
+            echo "" >> /tmp/wp-config-part1.php
+            cat /tmp/wp-salts.txt >> /tmp/wp-config-part1.php
+            echo "" >> /tmp/wp-config-part1.php
+            tail -n +$((insert_line + 1)) wp-config.php >> /tmp/wp-config-part1.php
+            mv /tmp/wp-config-part1.php wp-config.php
+        fi
+
+        # Clean up temp file
+        rm -f /tmp/wp-salts.txt
     fi
 
     # Add Redis configuration
