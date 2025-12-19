@@ -70,9 +70,20 @@ add_repositories() {
     log_step "Adding required repositories"
 
     # Add Ondrej PHP PPA
-    if ! grep -q "ondrej/php" /etc/apt/sources.list.d/*; then
+    if ! grep -rq "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
         log_info "Adding Ondrej PHP PPA"
-        add-apt-repository -y ppa:ondrej/php &>/dev/null
+
+        # Install software-properties-common if not present
+        if ! command_exists add-apt-repository; then
+            apt-get install -y software-properties-common &>/dev/null
+        fi
+
+        # Add the PPA
+        if add-apt-repository -y ppa:ondrej/php; then
+            log_success "Ondrej PHP PPA added successfully"
+        else
+            log_error "Failed to add Ondrej PHP PPA"
+        fi
     else
         log_info "Ondrej PHP PPA already added"
     fi
@@ -88,7 +99,12 @@ add_repositories() {
     fi
 
     # Update package lists after adding repositories
-    apt-get update -qq
+    log_step "Updating package lists"
+    if apt-get update -qq; then
+        log_success "Package lists updated"
+    else
+        log_warning "Package list update had issues, continuing..."
+    fi
 
     log_success "Repositories configured"
 }

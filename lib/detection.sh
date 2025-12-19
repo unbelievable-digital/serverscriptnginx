@@ -181,9 +181,28 @@ check_php() {
         esac
     else
         PHP_INSTALLED=0
-        PHP_MAJOR_VERSION="8.2"  # Default to 8.2
+        detect_best_php_version
         log_info "PHP not installed (will install PHP ${PHP_MAJOR_VERSION})"
     fi
+}
+
+detect_best_php_version() {
+    # Try to find the best available PHP version from repositories
+    # Prefer: 8.3 > 8.2 > 8.1 > 8.0 > 7.4
+
+    local preferred_versions=("8.3" "8.2" "8.1" "8.0" "7.4")
+
+    for version in "${preferred_versions[@]}"; do
+        if apt-cache show "php${version}-fpm" &>/dev/null; then
+            PHP_MAJOR_VERSION="$version"
+            log_info "Found available PHP version: ${version}"
+            return 0
+        fi
+    done
+
+    # Fallback to 8.2 if nothing found (shouldn't happen after PPA is added)
+    PHP_MAJOR_VERSION="8.2"
+    log_warning "Could not detect available PHP versions, defaulting to 8.2"
 }
 
 check_redis() {
@@ -417,6 +436,7 @@ validate_requirements() {
 
 export -f detect_os detect_cpu detect_ram detect_disk
 export -f check_nginx check_mariadb check_php check_redis check_certbot
+export -f detect_best_php_version
 export -f calculate_resources
 export -f display_software_status display_system_status
 export -f validate_requirements
