@@ -516,6 +516,136 @@ remove_site() {
     log_success "Site ${domain} removed successfully"
 }
 
+reconfigure_site() {
+    local domain="$1"
+
+    log_header "Reconfiguring WordPress Site: ${domain}"
+
+    # Check if site exists
+    if [[ ! -d "/var/www/${domain}" ]]; then
+        log_error "Site directory not found: /var/www/${domain}"
+    fi
+
+    # Check if site is registered
+    if ! grep -q "^${domain}|" "$CONFIG_FILE" 2>/dev/null; then
+        log_warning "Site not found in registry: ${domain}"
+        if ! confirm "Continue anyway?"; then
+            return
+        fi
+    fi
+
+    local site_root="/var/www/${domain}/public_html"
+
+    # Backup existing Nginx configuration
+    if [[ -f "/etc/nginx/sites-available/${domain}" ]]; then
+        log_step "Backing up existing Nginx configuration"
+        cp "/etc/nginx/sites-available/${domain}" "/etc/nginx/sites-available/${domain}.bak.$(date +%Y%m%d_%H%M%S)"
+    fi
+
+    # Regenerate Nginx configuration
+    log_step "Regenerating Nginx configuration with optimized settings"
+    generate_nginx_site "$domain" "$site_root"
+
+    # Test Nginx configuration
+    log_step "Testing Nginx configuration"
+    if nginx -t 2>&1 | grep -q "successful"; then
+        log_success "Nginx configuration is valid"
+
+        # Reload Nginx
+        log_step "Reloading Nginx"
+        reload_service nginx
+
+        log_success "Site ${domain} reconfigured successfully!"
+        echo
+        echo -e "${COLOR_CYAN}Changes applied:${COLOR_RESET}"
+        echo "  - Updated Nginx configuration with WordPress best practices"
+        echo "  - Fixed MIME type handling for CSS and JavaScript files"
+        echo "  - Enhanced security headers"
+        echo "  - Optimized FastCGI cache settings"
+        echo "  - Improved static file caching"
+        echo
+        log_info "Configuration file: /etc/nginx/sites-available/${domain}"
+        log_info "Backup saved to: /etc/nginx/sites-available/${domain}.bak.*"
+    else
+        log_error "Nginx configuration test failed!"
+        echo
+        echo "Running detailed test:"
+        nginx -t
+        echo
+        log_warning "Restoring backup configuration"
+
+        # Restore backup
+        local backup=$(ls -t /etc/nginx/sites-available/${domain}.bak.* 2>/dev/null | head -1)
+        if [[ -n "$backup" ]]; then
+            cp "$backup" "/etc/nginx/sites-available/${domain}"
+            log_info "Backup restored"
+        fi
+
+        return 1
+    fi
+}
+
+reconfigure_all_sites() {
+    log_header "Reconfiguring All WordPress Sites"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_warning "No sites registered yet"
+        return 0
+    fi
+
+    echo -e "${COLOR_CYAN}This will regenerate Nginx configuration for all registered sites.${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}Backups will be created before making changes.${COLOR_RESET}"
+    echo
+
+    if ! confirm "Do you want to proceed?"; then
+        log_info "Operation cancelled"
+        return
+    fi
+
+    echo
+
+    local count=0
+    local success=0
+    local failed=0
+
+    while IFS='|' read -r domain db_name created rest; do
+        # Skip empty lines
+        [[ -z "$domain" ]] && continue
+
+        # Skip comment lines
+        [[ "$domain" =~ ^#.* ]] && continue
+
+        count=$((count + 1))
+
+        echo -e "${COLOR_BOLD}Processing site ${count}: ${domain}${COLOR_RESET}"
+        echo
+
+        if reconfigure_site "$domain"; then
+            success=$((success + 1))
+        else
+            failed=$((failed + 1))
+        fi
+
+        echo
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo
+    done < "$CONFIG_FILE"
+
+    # Summary
+    log_header "Reconfiguration Summary"
+    echo
+    table_row "Total sites" "$count"
+    table_row "Successfully reconfigured" "$success"
+    table_row "Failed" "$failed"
+    echo
+
+    if [[ $failed -eq 0 ]]; then
+        log_success "All sites reconfigured successfully!"
+    else
+        log_warning "Some sites failed to reconfigure. Please check the errors above."
+    fi
+}
+
 ################################################################################
 # Helper Functions
 ################################################################################
@@ -585,4 +715,5 @@ install_redis_plugin() {
 ################################################################################
 
 export -f add_wordpress_site list_sites remove_site
+export -f reconfigure_site reconfigure_all_sites
 export -f register_site store_credentials install_redis_plugin

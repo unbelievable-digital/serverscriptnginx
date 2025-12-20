@@ -82,17 +82,19 @@ show_help() {
 Usage: $(basename "$0") [OPTIONS]
 
 OPTIONS:
-    --install           Run full LEMP stack installation
-    --menu              Launch interactive menu system (default if no args)
-    --add-site DOMAIN   Add new WordPress site
-    --list-sites        List all WordPress sites
-    --backup-all        Backup all WordPress sites
-    --system-status     Display system status and resource usage
-    --performance       Show all performance settings and configurations
-    --show-settings     Alias for --performance
-    --update            Update this script to latest version
-    --version           Show version information
-    -h, --help          Show this help message
+    --install                Run full LEMP stack installation
+    --menu                   Launch interactive menu system (default if no args)
+    --add-site DOMAIN        Add new WordPress site
+    --list-sites             List all WordPress sites
+    --reconfigure DOMAIN     Reconfigure Nginx for a specific site (fix MIME types)
+    --reconfigure-all        Reconfigure Nginx for all sites (fix MIME types)
+    --backup-all             Backup all WordPress sites
+    --system-status          Display system status and resource usage
+    --performance            Show all performance settings and configurations
+    --show-settings          Alias for --performance
+    --update                 Update this script to latest version
+    --version                Show version information
+    -h, --help               Show this help message
 
 EXAMPLES:
     # Run full installation (requires root)
@@ -106,6 +108,12 @@ EXAMPLES:
 
     # List all sites
     sudo ./build.sh --list-sites
+
+    # Reconfigure Nginx for a specific site (fix MIME type issues)
+    sudo ./build.sh --reconfigure example.com
+
+    # Reconfigure Nginx for all sites (fix MIME type issues)
+    sudo ./build.sh --reconfigure-all
 
     # Backup all sites
     sudo ./build.sh --backup-all
@@ -307,6 +315,30 @@ parse_arguments() {
                     list_sites
                 else
                     log_error "WordPress management not available. Run --install first."
+                fi
+                exit 0
+                ;;
+            --reconfigure)
+                check_root
+                if [[ -n "${2:-}" ]]; then
+                    DOMAIN="$2"
+                    if type -t reconfigure_site &>/dev/null; then
+                        reconfigure_site "$DOMAIN"
+                    else
+                        log_error "Site reconfiguration not available. Run --install first."
+                    fi
+                    shift
+                else
+                    log_error "Please specify a domain name"
+                fi
+                exit 0
+                ;;
+            --reconfigure-all)
+                check_root
+                if type -t reconfigure_all_sites &>/dev/null; then
+                    reconfigure_all_sites
+                else
+                    log_error "Site reconfiguration not available. Run --install first."
                 fi
                 exit 0
                 ;;

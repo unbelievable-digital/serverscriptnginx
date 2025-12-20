@@ -111,66 +111,108 @@ generate_nginx_site() {
     log_step "Generating Nginx configuration for ${domain}"
 
     # Create configuration
-    cat > "$config_file" <<EOF
-# WordPress site configuration for ${domain}
-# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+    cat > "$config_file" <<'EOF'
+# WordPress site configuration for DOMAIN_PLACEHOLDER
+# Generated: TIMESTAMP_PLACEHOLDER
+# Optimized for WordPress performance and security
 
 server {
     listen 80;
     listen [::]:80;
-    server_name ${domain} www.${domain};
+    server_name DOMAIN_PLACEHOLDER www.DOMAIN_PLACEHOLDER;
 
-    root ${site_root};
+    root SITE_ROOT_PLACEHOLDER;
     index index.php index.html index.htm;
 
-    access_log /var/www/${domain}/logs/access.log;
-    error_log /var/www/${domain}/logs/error.log;
+    access_log /var/www/DOMAIN_PLACEHOLDER/logs/access.log;
+    error_log /var/www/DOMAIN_PLACEHOLDER/logs/error.log;
+
+    # Maximum file upload size
+    client_max_body_size 128M;
 
     # FastCGI Cache settings
-    set \$skip_cache 0;
+    set $skip_cache 0;
 
     # POST requests and URLs with a query string should always go to PHP
-    if (\$request_method = POST) {
-        set \$skip_cache 1;
+    if ($request_method = POST) {
+        set $skip_cache 1;
     }
-    if (\$query_string != "") {
-        set \$skip_cache 1;
+    if ($query_string != "") {
+        set $skip_cache 1;
     }
 
     # Don't cache URIs containing the following segments
-    if (\$request_uri ~* "/wp-admin/|/xmlrpc.php|wp-.*.php|/feed/|index.php|sitemap(_index)?.xml") {
-        set \$skip_cache 1;
+    if ($request_uri ~* "/wp-admin/|/xmlrpc.php|wp-.*.php|/feed/|index.php|sitemap(_index)?.xml") {
+        set $skip_cache 1;
     }
 
     # Don't use the cache for logged in users or recent commenters
-    if (\$http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in") {
-        set \$skip_cache 1;
+    if ($http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in") {
+        set $skip_cache 1;
     }
 
-    location / {
-        try_files \$uri \$uri/ /index.php?\$args;
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
     }
 
-    location ~ \.php\$ {
-        include fastcgi_params;
-        fastcgi_intercept_errors on;
-        fastcgi_pass unix:${php_sock};
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-
-        # FastCGI cache
-        fastcgi_cache_bypass \$skip_cache;
-        fastcgi_no_cache \$skip_cache;
-        fastcgi_cache WORDPRESS;
-        fastcgi_cache_valid 200 60m;
-    }
-
-    location ~ /\.ht {
+    # Deny access to sensitive files
+    location ~* /(?:uploads|files)/.*\.php$ {
         deny all;
     }
 
+    location ~* ^/wp-content/uploads/.*.(html|htm|shtml|php|js|swf)$ {
+        deny all;
+    }
+
+    # Block access to xmlrpc.php
+    location = /xmlrpc.php {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # WordPress main location
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # PHP processing with FastCGI
+    location ~ \.php$ {
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_intercept_errors on;
+        fastcgi_pass unix:PHP_SOCK_PLACEHOLDER;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_index index.php;
+
+        # FastCGI timeouts
+        fastcgi_read_timeout 300;
+        fastcgi_send_timeout 300;
+        fastcgi_connect_timeout 300;
+
+        # FastCGI buffer settings
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 256 16k;
+        fastcgi_busy_buffers_size 256k;
+        fastcgi_temp_file_write_size 256k;
+
+        # FastCGI cache
+        fastcgi_cache_bypass $skip_cache;
+        fastcgi_no_cache $skip_cache;
+        fastcgi_cache WORDPRESS;
+        fastcgi_cache_valid 200 60m;
+        fastcgi_cache_valid 404 10m;
+        add_header X-FastCGI-Cache $upstream_cache_status;
+    }
+
+    # Favicon and robots.txt
     location = /favicon.ico {
         log_not_found off;
         access_log off;
+        expires max;
     }
 
     location = /robots.txt {
@@ -179,24 +221,95 @@ server {
         access_log off;
     }
 
-    location ~* \.(css|gif|ico|jpeg|jpg|js|png|svg|woff|woff2|ttf|eot)$ {
+    # CSS and JavaScript files - CRITICAL for MIME types
+    location ~* \.(css)$ {
+        add_header Content-Type text/css;
+        expires 30d;
+        add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        access_log off;
+    }
+
+    location ~* \.(js)$ {
+        add_header Content-Type application/javascript;
+        expires 30d;
+        add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        access_log off;
+    }
+
+    # Image files
+    location ~* \.(jpg|jpeg|png|gif|ico|svg|webp|avif)$ {
         expires max;
+        add_header Cache-Control "public, immutable";
         log_not_found off;
         access_log off;
+    }
+
+    # Font files
+    location ~* \.(woff|woff2|ttf|ttc|otf|eot)$ {
+        expires max;
+        add_header Cache-Control "public, immutable";
+        add_header Access-Control-Allow-Origin "*";
+        log_not_found off;
+        access_log off;
+    }
+
+    # Media files
+    location ~* \.(mp4|webm|ogg|mp3|wav|flac|aac|m4a)$ {
+        expires max;
+        add_header Cache-Control "public, immutable";
+        log_not_found off;
+        access_log off;
+    }
+
+    # Document files
+    location ~* \.(pdf|doc|docx|xls|xlsx|ppt|pptx)$ {
+        expires 30d;
+        add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+        log_not_found off;
+        access_log off;
+    }
+
+    # Archive files
+    location ~* \.(zip|tar|gz|rar|7z)$ {
+        expires 30d;
+        add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+        log_not_found off;
+        access_log off;
+    }
+
+    # Deny access to backup and log files
+    location ~* \.(bak|config|sql|fla|psd|ini|log|sh|inc|swp|dist|sql\.gz)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
     }
 
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # Disable server tokens
+    server_tokens off;
 }
 EOF
+
+    # Replace placeholders
+    sed -i "s|DOMAIN_PLACEHOLDER|${domain}|g" "$config_file"
+    sed -i "s|SITE_ROOT_PLACEHOLDER|${site_root}|g" "$config_file"
+    sed -i "s|PHP_SOCK_PLACEHOLDER|${php_sock}|g" "$config_file"
+    sed -i "s|TIMESTAMP_PLACEHOLDER|$(date '+%Y-%m-%d %H:%M:%S')|g" "$config_file"
 
     # Enable site
     if [[ ! -L "/etc/nginx/sites-enabled/${domain}" ]]; then
         ln -s "$config_file" "/etc/nginx/sites-enabled/${domain}"
         log_success "Nginx site configuration created and enabled for ${domain}"
+    else
+        log_success "Nginx site configuration updated for ${domain}"
     fi
 }
 

@@ -18,23 +18,25 @@ EOF
         echo "  1. Install New WordPress Site"
         echo "  2. List All WordPress Sites"
         echo "  3. Manage Existing Site"
-        echo "  4. System Status & Monitoring"
-        echo "  5. Backup Management"
-        echo "  6. Performance Tuning"
-        echo "  7. Security Management"
-        echo "  8. Exit"
+        echo "  4. Reconfigure All Sites (Fix MIME types & optimize)"
+        echo "  5. System Status & Monitoring"
+        echo "  6. Backup Management"
+        echo "  7. Performance Tuning"
+        echo "  8. Security Management"
+        echo "  9. Exit"
         echo
-        read -p "Enter choice [1-8]: " choice
+        read -p "Enter choice [1-9]: " choice
 
         case $choice in
             1) menu_add_site ;;
             2) menu_list_sites ;;
             3) menu_manage_site ;;
-            4) menu_system_status ;;
-            5) menu_backup ;;
-            6) menu_performance ;;
-            7) menu_security ;;
-            8) exit 0 ;;
+            4) reconfigure_all_sites; pause ;;
+            5) menu_system_status ;;
+            6) menu_backup ;;
+            7) menu_performance ;;
+            8) menu_security ;;
+            9) exit 0 ;;
             *) log_error "Invalid option" ;;
         esac
     done
@@ -68,16 +70,18 @@ menu_manage_site() {
         echo
         echo "  1. Install SSL Certificate"
         echo "  2. Backup Site"
-        echo "  3. Remove Site"
-        echo "  4. Back to Main Menu"
+        echo "  3. Reconfigure Nginx (Fix MIME types & optimize)"
+        echo "  4. Remove Site"
+        echo "  5. Back to Main Menu"
         echo
-        read -p "Enter choice [1-4]: " choice
+        read -p "Enter choice [1-5]: " choice
 
         case $choice in
             1) install_ssl "$domain"; pause ;;
             2) backup_site "$domain"; pause ;;
-            3) remove_site "$domain"; pause; break ;;
-            4) break ;;
+            3) reconfigure_site "$domain"; pause ;;
+            4) remove_site "$domain"; pause; break ;;
+            5) break ;;
             *) log_error "Invalid option"; pause ;;
         esac
     done
